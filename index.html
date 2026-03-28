@@ -287,6 +287,7 @@
     <button class="admin-tab active" onclick="switchTab('tab-profile',this)">👤 Профиль</button>
     <button class="admin-tab" onclick="switchTab('tab-works',this)">🗂 Работы</button>
     <button class="admin-tab" onclick="switchTab('tab-reviews',this)">💬 Отзывы</button>
+    <button class="admin-tab" onclick="switchTab('tab-cloud',this)">☁️ Синхронизация</button>
   </div>
 
   <!-- PROFILE TAB -->
@@ -324,6 +325,26 @@
     <div class="field-group"><label>Эмодзи / иконка</label><input id="w-icon" type="text" placeholder="🤖"></div>
     <div class="field-group"><label>Ссылка (необязательно)</label><input id="w-link" type="text" placeholder="https://..."></div>
     <button class="btn-primary" onclick="addWork()">➕ Добавить</button>
+  </div>
+
+  <!-- CLOUD TAB -->
+  <div id="tab-cloud" class="admin-section">
+    <div style="background:rgba(0,212,255,.06);border:1px solid var(--glass-border);border-radius:10px;padding:20px;margin-bottom:24px;font-size:.88rem;line-height:1.7;color:var(--ice-2);">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:1.1rem;color:var(--accent);letter-spacing:2px;margin-bottom:12px;">КАК НАСТРОИТЬ</div>
+      1. Зайди на <a href="https://jsonbin.io" target="_blank" style="color:var(--accent);">jsonbin.io</a> и зарегистрируйся бесплатно<br>
+      2. Нажми <b style="color:var(--ice-1);">+ Create Bin</b>, вставь <code style="color:var(--accent);">{}</code> и сохрани<br>
+      3. Скопируй <b style="color:var(--ice-1);">BIN ID</b> из URL (длинная строка после /b/)<br>
+      4. В профиле нажми <b style="color:var(--ice-1);">API Keys</b> → скопируй Master Key<br>
+      5. Вставь оба значения ниже и нажми <b style="color:var(--ice-1);">Сохранить и синхронизировать</b>
+    </div>
+    <div class="field-group"><label>BIN ID</label><input id="cl-bin" type="text" placeholder="64a3f2..."></div>
+    <div class="field-group"><label>Master API Key</label><input id="cl-key" type="password" placeholder="$2a$10$..."></div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;">
+      <button class="btn-primary" onclick="saveCloud()">☁️ Сохранить и синхронизировать</button>
+      <button class="btn-primary" onclick="pushCloud()" style="background:linear-gradient(135deg,#00a86b,#007a4e);">↑ Загрузить данные в облако</button>
+      <button class="btn-primary" onclick="pullCloud()" style="background:linear-gradient(135deg,#0066cc,#004a99);">↓ Скачать данные из облака</button>
+    </div>
+    <div id="cloud-status" style="margin-top:14px;font-family:'Share Tech Mono',monospace;font-size:.82rem;min-height:20px;"></div>
   </div>
 
   <!-- REVIEWS TAB -->
@@ -489,13 +510,54 @@ for(let i=0;i<35;i++){
 /* ================================================================
    DATA
    ================================================================ */
-let data=JSON.parse(localStorage.getItem('cf_data')||'null')||{
+const DEFAULT_DATA={
   profile:{name:'Браян',heroTitle:'COUNTERFLUG',heroSub:'Боты · Сайты · Автоматизация',
     heroDesc:'Разрабатываю умные Telegram-боты, веб-приложения и инструменты автоматизации. Быстро. Надёжно. Под ключ.',
     about:'',contact:'@Counterflug',logo:'',password:''},
   works:[],reviews:[]
 };
-const save=()=>localStorage.setItem('cf_data',JSON.stringify(data));
+
+let data=JSON.parse(localStorage.getItem('cf_data')||'null')||DEFAULT_DATA;
+
+/* Cloud config stored separately */
+let cloudCfg=JSON.parse(localStorage.getItem('cf_cloud')||'null')||{binId:'',apiKey:''};
+
+/* Save locally always, then push to cloud if configured */
+const save=()=>{
+  localStorage.setItem('cf_data',JSON.stringify(data));
+  if(cloudCfg.binId && cloudCfg.apiKey) cloudPush();
+};
+
+async function cloudPush(){
+  try{
+    await fetch(`https://api.jsonbin.io/v3/b/${cloudCfg.binId}`,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':cloudCfg.apiKey,'X-Bin-Versioning':'false'},
+      body:JSON.stringify(data)
+    });
+  }catch(e){console.warn('Cloud push failed',e);}
+}
+
+async function cloudPull(){
+  if(!cloudCfg.binId||!cloudCfg.apiKey) return false;
+  try{
+    const r=await fetch(`https://api.jsonbin.io/v3/b/${cloudCfg.binId}/latest`,{
+      headers:{'X-Master-Key':cloudCfg.apiKey}
+    });
+    if(!r.ok) return false;
+    const j=await r.json();
+    data={...DEFAULT_DATA,...j.record};
+    localStorage.setItem('cf_data',JSON.stringify(data));
+    return true;
+  }catch(e){return false;}
+}
+
+/* On load — pull from cloud if configured */
+(async()=>{
+  const synced=await cloudPull();
+  renderSite();
+  if(synced) console.log('✅ Данные загружены из облака');
+})();
 
 /* ================================================================
    RENDER
@@ -613,8 +675,38 @@ function loadAdmin(){
   document.getElementById('pf-contact').value=p.contact||'';
   document.getElementById('pf-logo-url').value=p.logo&&!p.logo.startsWith('data:')?p.logo:'';
   document.getElementById('pf-password').value=p.password||'';
+  document.getElementById('cl-bin').value=cloudCfg.binId||'';
+  document.getElementById('cl-key').value=cloudCfg.apiKey||'';
   updateLogoPreview(p.logo);
   renderWA(); renderRA();
+}
+
+function cloudStatus(msg,ok=true){
+  const el=document.getElementById('cloud-status');
+  el.textContent=msg; el.style.color=ok?'#00d4ff':'#ff6666';
+}
+
+function saveCloud(){
+  cloudCfg={binId:document.getElementById('cl-bin').value.trim(),apiKey:document.getElementById('cl-key').value.trim()};
+  localStorage.setItem('cf_cloud',JSON.stringify(cloudCfg));
+  if(!cloudCfg.binId||!cloudCfg.apiKey){cloudStatus('❌ Заполните оба поля',false);return;}
+  cloudStatus('⏳ Синхронизация...');
+  cloudPush().then(()=>cloudStatus('✅ Настройки сохранены. Данные загружены в облако!')).catch(()=>cloudStatus('❌ Ошибка подключения. Проверьте ключ и BIN ID',false));
+}
+
+async function pushCloud(){
+  if(!cloudCfg.binId||!cloudCfg.apiKey){cloudStatus('❌ Сначала настройте синхронизацию',false);return;}
+  cloudStatus('⏳ Загрузка в облако...');
+  try{await cloudPush();cloudStatus('✅ Данные успешно загружены в облако!');}
+  catch(e){cloudStatus('❌ Ошибка: '+e.message,false);}
+}
+
+async function pullCloud(){
+  if(!cloudCfg.binId||!cloudCfg.apiKey){cloudStatus('❌ Сначала настройте синхронизацию',false);return;}
+  cloudStatus('⏳ Загрузка из облака...');
+  const ok=await cloudPull();
+  if(ok){renderSite();loadAdmin();cloudStatus('✅ Данные успешно получены из облака!');}
+  else cloudStatus('❌ Ошибка загрузки. Проверьте BIN ID и ключ',false);
 }
 
 /* logo */
@@ -773,7 +865,6 @@ if(statGrid){
   stObs.observe(statGrid);
 }
 
-renderSite();
 </script>
 </body>
 </html>
