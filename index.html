@@ -530,7 +530,7 @@ function renderWorks(){
         <div class="work-card-tag">${w.tag||'PROJECT'}</div>
         <div class="work-card-title">${w.title}</div>
         <div class="work-card-desc">${w.desc||''}</div>
-        ${w.link?`<a class="work-card-link" href="${w.link}" target="_blank">↗ Подробнее</a>`:''}
+        ${w.link?`<a class="work-card-link" href="${w.link.startsWith('@')?'https://t.me/'+w.link.slice(1):w.link.startsWith('http')?w.link:'https://'+w.link}" target="_blank">↗ Подробнее</a>`:''}
       </div>
     </div>`).join('');
 }
