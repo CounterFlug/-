@@ -502,13 +502,7 @@ let data=JSON.parse(localStorage.getItem('cf_data')||'null')||DEFAULT_DATA;
 
 const save=()=>{
   localStorage.setItem('cf_data',JSON.stringify(data));
-  // Strip base64 images before pushing to Firebase (too large)
-  const cloudData={
-    ...data,
-    profile:{...data.profile, logo: data.profile.logo&&data.profile.logo.startsWith('data:') ? '' : data.profile.logo},
-    reviews: data.reviews.map(r=>({...r, avatar: r.avatar&&r.avatar.startsWith('data:') ? '' : r.avatar}))
-  };
-  fetch(FB_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cloudData)})
+  fetch(FB_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
     .catch(e=>console.warn('Firebase save failed',e));
 };
 
