@@ -226,6 +226,16 @@
   .star.empty{color:#252525;}
   .review-text{font-size:.9rem;color:var(--ice-2);line-height:1.6;}
   .review-date{margin-top:12px;font-family:'Share Tech Mono',monospace;font-size:.7rem;color:var(--ice-5);}
+  .review-price{display:inline-block;margin-top:10px;padding:4px 12px;background:rgba(0,212,255,.08);
+    border:1px solid rgba(0,212,255,.2);border-radius:100px;font-family:'Share Tech Mono',monospace;
+    font-size:.75rem;color:var(--accent);letter-spacing:1px;}
+  .review-photo{width:100%;border-radius:8px;margin-top:12px;object-fit:cover;max-height:200px;
+    border:1px solid var(--glass-border);cursor:pointer;transition:opacity .2s;}
+  .review-photo:hover{opacity:.85;}
+  .photo-modal{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);
+    align-items:center;justify-content:center;cursor:pointer;}
+  .photo-modal.open{display:flex;}
+  .photo-modal img{max-width:90vw;max-height:90vh;border-radius:8px;border:1px solid var(--glass-border);}
 
   /* CONTACT */
   .contact-grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center;}
@@ -352,8 +362,23 @@
     </div>
     <div class="field-group"><label>Текст отзыва</label><textarea id="r-text"></textarea></div>
     <div class="field-group"><label>Дата</label><input id="r-date" type="text" placeholder="Март 2026"></div>
+    <div class="field-group"><label>Цена (что заплатил клиент)</label><input id="r-price" type="text" placeholder="2500 ₽"></div>
+    <div class="field-group">
+      <label>Фото к отзыву (скриншот переписки и т.д.)</label>
+      <div class="upload-row">
+        <div class="img-preview" id="r-photo-preview" style="border-radius:6px;width:80px;height:54px;">—</div>
+        <label class="file-btn" for="r-photo-file">📁 Загрузить фото</label>
+        <input type="file" id="r-photo-file" accept="image/*" onchange="handleReviewPhoto(event)">
+      </div>
+      <input id="r-photo-url" type="text" placeholder="или вставьте URL фото...">
+    </div>
     <button class="btn-primary" onclick="addReview()">➕ Добавить отзыв</button>
   </div>
+</div>
+
+<!-- PHOTO MODAL -->
+<div class="photo-modal" id="photo-modal" onclick="this.classList.remove('open')">
+  <img id="photo-modal-img" src="" alt="">
 </div>
 
 <!-- SITE -->
@@ -588,6 +613,8 @@ function renderReviews(){
       </div>
       <div class="review-stars">${starsHtml(r.stars||5)}</div>
       <div class="review-text">${r.text}</div>
+      ${r.price?`<div class="review-price">💳 ${r.price}</div>`:''}
+      ${r.photo?`<img class="review-photo" src="${r.photo}" alt="фото" onclick="document.getElementById('photo-modal-img').src=this.src;document.getElementById('photo-modal').classList.add('open')">`:''}
       <div class="review-date">${r.date||''}</div>
     </div>`;
   }).join('');
@@ -673,6 +700,21 @@ document.getElementById('pf-logo-url').addEventListener('input',e=>updateLogoPre
 
 /* avatar for reviews */
 let pendingAv='';
+let pendingPhoto='';
+function handleReviewPhoto(e){
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader(); r.onload=ev=>{
+    pendingPhoto=ev.target.result;
+    document.getElementById('r-photo-url').value='';
+    const p=document.getElementById('r-photo-preview');
+    p.innerHTML=`<img src="${ev.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;">`;
+  }; r.readAsDataURL(f);
+}
+document.getElementById('r-photo-url').addEventListener('input',e=>{
+  pendingPhoto='';
+  const v=e.target.value, p=document.getElementById('r-photo-preview');
+  p.innerHTML=v?`<img src="${v}" style="width:100%;height:100%;object-fit:cover;border-radius:6px;" onerror="this.parentElement.textContent='?'">`:'—';
+});
 function handleAvatarFile(e){
   const f=e.target.files[0]; if(!f) return;
   const r=new FileReader(); r.onload=ev=>{
@@ -746,11 +788,15 @@ function addReview(){
   const n=document.getElementById('r-name').value.trim(),txt=document.getElementById('r-text').value.trim();
   if(!n||!txt){alert('Введите имя и текст!');return;}
   const av=pendingAv||document.getElementById('r-avatar-url').value.trim();
+  const photo=pendingPhoto||document.getElementById('r-photo-url').value.trim();
   data.reviews.push({name:n,handle:document.getElementById('r-handle').value.trim(),
-    avatar:av,stars:nStar,text:txt,date:document.getElementById('r-date').value.trim()});
+    avatar:av,stars:nStar,text:txt,date:document.getElementById('r-date').value.trim(),
+    price:document.getElementById('r-price').value.trim(),photo:photo});
   save();
-  ['r-name','r-handle','r-avatar-url','r-text','r-date'].forEach(id=>document.getElementById(id).value='');
-  pendingAv=''; document.getElementById('r-av-preview').textContent='?';
+  ['r-name','r-handle','r-avatar-url','r-text','r-date','r-price','r-photo-url'].forEach(id=>document.getElementById(id).value='');
+  pendingAv=''; pendingPhoto='';
+  document.getElementById('r-av-preview').textContent='?';
+  document.getElementById('r-photo-preview').textContent='—';
   setNewStar(5); renderRA(); renderReviews(); alert('✅ Отзыв добавлен!');
 }
 function delReview(i){if(!confirm('Удалить отзыв?'))return;data.reviews.splice(i,1);save();renderRA();renderReviews();}
