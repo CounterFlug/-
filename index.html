@@ -489,8 +489,6 @@ for(let i=0;i<35;i++){
 /* ================================================================
    DATA
    ================================================================ */
-const FB_URL='https://countrerflug-default-rtdb.europe-west1.firebasedatabase.app/cf_data.json';
-
 const DEFAULT_DATA={
   profile:{name:'Браян',heroTitle:'COUNTERFLUG',heroSub:'Боты · Сайты · Автоматизация',
     heroDesc:'Разрабатываю умные Telegram-боты, веб-приложения и инструменты автоматизации. Быстро. Надёжно. Под ключ.',
@@ -500,20 +498,41 @@ const DEFAULT_DATA={
 
 let data=JSON.parse(localStorage.getItem('cf_data')||'null')||DEFAULT_DATA;
 
+/* Firebase SDK */
+import('https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js').then(({initializeApp})=>{
+  return Promise.all([
+    import('https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js'),
+  ]).then(([{getDatabase,ref,set,get,child}])=>{
+    const app=initializeApp({
+      apiKey:'AIzaSyArGuGUtY81X5H7gC7KYB0ICzGIhfrBawg',
+      authDomain:'countrerflug.firebaseapp.com',
+      databaseURL:'https://countrerflug-default-rtdb.europe-west1.firebasedatabase.app',
+      projectId:'countrerflug',
+      storageBucket:'countrerflug.firebasestorage.app',
+      messagingSenderId:'521713640151',
+      appId:'1:521713640151:web:296095340c9f8470e60692'
+    });
+    const db=getDatabase(app);
+    const dbRef=ref(db,'cf_data');
+
+    window._fbSet=(d)=>set(dbRef,d).catch(e=>console.warn('FB write error',e));
+    window._fbGet=()=>get(child(ref(db),'/cf_data')).then(snap=>snap.exists()?snap.val():null).catch(()=>null);
+
+    /* Load from Firebase on start */
+    window._fbGet().then(remote=>{
+      if(remote&&remote.profile){
+        data={...DEFAULT_DATA,...remote};
+        localStorage.setItem('cf_data',JSON.stringify(data));
+      }
+      renderSite();
+    });
+  });
+}).catch(e=>{console.warn('Firebase load error',e);renderSite();});
+
 const save=()=>{
   localStorage.setItem('cf_data',JSON.stringify(data));
-  fetch(FB_URL,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
-    .catch(e=>console.warn('Firebase save failed',e));
+  if(window._fbSet) window._fbSet(data);
 };
-
-/* On load — pull from Firebase */
-fetch(FB_URL).then(r=>r.json()).then(d=>{
-  if(d && d.profile){
-    data=d;
-    localStorage.setItem('cf_data',JSON.stringify(data));
-  }
-  renderSite();
-}).catch(()=>renderSite());
 
 /* ================================================================
    RENDER
